@@ -1,3 +1,4 @@
+import { translateMedicationInfo } from './gemini';
 import { PatientProfile } from '../types';
 
 const API_BASE = 'https://app.backboard.io/api';
@@ -14,6 +15,20 @@ export interface BackboardModel {
   context_limit?: number;
 }
 
+export interface MedicationSectionTitles {
+  use: string;
+  how: string;
+  sideEffects: string;
+  warning: string;
+}
+
+export const ENGLISH_SECTION_TITLES: MedicationSectionTitles = {
+  use: 'What this medication does',
+  how: 'How and when to take it',
+  sideEffects: 'Common side effects (usually not dangerous)',
+  warning: 'Call your doctor if you notice…',
+};
+
 export interface MedicationInfo {
   name: string;
   description?: string;
@@ -22,6 +37,7 @@ export interface MedicationInfo {
   how: string;
   sideEffects: string[];
   warning: string;
+  sectionTitles?: MedicationSectionTitles;
   unknown?: boolean;
 }
 
@@ -69,13 +85,12 @@ export async function listModels(provider: string, limit = 200): Promise<Backboa
 }
 
 function buildPrompt(query: string, profile: PatientProfile | null): string {
-  const language = profile?.language ?? 'English';
   const terminology = profile?.medicalTerminology ?? 'plain';
   const tone = profile?.communicationTone ?? 'warm';
 
   return [
     'You are a medical assistant explaining a medication to a patient.',
-    `Target language: ${language}. Write every field of your response in ${language}.`,
+    'Output language: English only. A separate translation step handles localization.',
     `Reading level: ${TERMINOLOGY_GUIDANCE[terminology]}`,
     `Tone: ${TONE_GUIDANCE[tone]}`,
     'Preserve clinical accuracy: do not invent dosages, frequencies, or contraindications.',
@@ -101,7 +116,10 @@ function extractJson(raw: string): string {
   return match ? match[0] : stripped;
 }
 
-export async function askMedication(query: string, profile: PatientProfile | null): Promise<MedicationInfo> {
+async function fetchEnglishMedicationInfo(
+  query: string,
+  profile: PatientProfile | null,
+): Promise<MedicationInfo> {
   const key = requireKey();
 
   const res = await fetch(API_URL, {
@@ -146,4 +164,27 @@ export async function askMedication(query: string, profile: PatientProfile | nul
     warning: parsed.warning ?? '',
     unknown: Boolean(parsed.unknown),
   };
+}
+
+export async function askMedication(
+  query: string,
+  profile: PatientProfile | null,
+): Promise<MedicationInfo> {
+  const englishInfo = await fetchEnglishMedicationInfo(query, profile);
+
+  if (englishInfo.unknown) {
+    return englishInfo;
+  }
+
+  const language = profile?.language ?? 'English';
+  if (language === 'English') {
+    return { ...englishInfo, sectionTitles: ENGLISH_SECTION_TITLES };
+  }
+
+  try {
+    return await translateMedicationInfo(englishInfo, profile);
+  } catch (err) {
+    // Translation failed — return English content with English titles so the user still sees something.
+    return { ...englishInfo, sectionTitles: ENGLISH_SECTION_TITLES };
+  }
 }

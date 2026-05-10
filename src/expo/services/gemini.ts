@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import type { MedicationInfo } from './backboard';
 import { PatientProfile } from '../types';
 
 const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -76,6 +77,88 @@ function buildSystemInstruction(profile: SimplifyInput['profile']): string {
   );
 
   return lines.join('\n');
+}
+
+const ENGLISH_MED_SECTION_TITLES = {
+  use: 'What this medication does',
+  how: 'How and when to take it',
+  sideEffects: 'Common side effects (usually not dangerous)',
+  warning: 'Call your doctor if you notice…',
+};
+
+export async function translateMedicationInfo(
+  info: MedicationInfo,
+  profile: PatientProfile | null,
+): Promise<MedicationInfo> {
+  const ai = getClient();
+  const language = profile?.language ?? 'English';
+
+  const systemInstruction = [
+    `You translate medical content from English into ${language}.`,
+    `Translate every text field naturally into ${language}, including the section titles.`,
+    'Preserve every clinical fact exactly: medication names, dosages, frequencies, numbers, and units. Never invent or change them.',
+    'Keep canonical drug names (e.g. "Metformin", "Lisinopril") in their standard form unless an established translation exists in the target language.',
+    'If a string field is empty in the source, leave it empty in the output. If sideEffects is empty, return an empty array.',
+  ].join('\n');
+
+  const userPrompt = JSON.stringify({
+    name: info.name,
+    description: info.description ?? '',
+    schedule: info.schedule ?? '',
+    use: info.use,
+    how: info.how,
+    sideEffects: info.sideEffects,
+    warning: info.warning,
+    sectionTitles: ENGLISH_MED_SECTION_TITLES,
+  });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: userPrompt,
+    config: {
+      systemInstruction,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          description: { type: Type.STRING, nullable: true },
+          schedule: { type: Type.STRING, nullable: true },
+          use: { type: Type.STRING },
+          how: { type: Type.STRING },
+          sideEffects: { type: Type.ARRAY, items: { type: Type.STRING } },
+          warning: { type: Type.STRING },
+          sectionTitles: {
+            type: Type.OBJECT,
+            properties: {
+              use: { type: Type.STRING },
+              how: { type: Type.STRING },
+              sideEffects: { type: Type.STRING },
+              warning: { type: Type.STRING },
+            },
+            required: ['use', 'how', 'sideEffects', 'warning'],
+          },
+        },
+        required: ['name', 'use', 'how', 'sideEffects', 'warning', 'sectionTitles'],
+      },
+    },
+  });
+
+  const raw = response.text;
+  if (!raw) throw new Error('Gemini returned empty translation response');
+
+  const parsed = JSON.parse(raw) as MedicationInfo;
+  return {
+    name: parsed.name || info.name,
+    description: parsed.description || undefined,
+    schedule: parsed.schedule || undefined,
+    use: parsed.use ?? '',
+    how: parsed.how ?? '',
+    sideEffects: Array.isArray(parsed.sideEffects) ? parsed.sideEffects : [],
+    warning: parsed.warning ?? '',
+    sectionTitles: parsed.sectionTitles,
+    unknown: false,
+  };
 }
 
 export async function simplifyAndTranslate(input: SimplifyInput): Promise<SimplifyResult> {

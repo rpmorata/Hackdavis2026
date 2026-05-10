@@ -13,7 +13,7 @@ import {
 import { Body, Screen } from '../components/ui';
 import { useProfile } from '../context/ProfileContext';
 import { releaseAudioUri } from '../services/audio';
-import { askMedication, MedicationInfo } from '../services/backboard';
+import { askMedication, ENGLISH_SECTION_TITLES, MedicationInfo } from '../services/backboard';
 import { synthesize } from '../services/elevenlabs';
 import { colors, typography } from '../theme';
 
@@ -204,58 +204,65 @@ export function MedicationScreen() {
                 </Text>
               </View>
 
-              {info!.use ? (
-                <Section
-                  icon="medication"
-                  title="What this medication does"
-                  isOpen={expanded.use}
-                  onToggle={() => toggleSection('use')}
-                >
-                  <Text style={styles.sectionBody}>{info!.use}</Text>
-                </Section>
-              ) : null}
+              {(() => {
+                const titles = info!.sectionTitles ?? ENGLISH_SECTION_TITLES;
+                return (
+                  <>
+                    {info!.use ? (
+                      <Section
+                        icon="medication"
+                        title={titles.use}
+                        isOpen={expanded.use}
+                        onToggle={() => toggleSection('use')}
+                      >
+                        <Text style={styles.sectionBody}>{info!.use}</Text>
+                      </Section>
+                    ) : null}
 
-              {info!.how ? (
-                <Section
-                  icon="schedule"
-                  title="How and when to take it"
-                  isOpen={expanded.how}
-                  onToggle={() => toggleSection('how')}
-                >
-                  <Text style={styles.sectionBody}>{info!.how}</Text>
-                </Section>
-              ) : null}
+                    {info!.how ? (
+                      <Section
+                        icon="schedule"
+                        title={titles.how}
+                        isOpen={expanded.how}
+                        onToggle={() => toggleSection('how')}
+                      >
+                        <Text style={styles.sectionBody}>{info!.how}</Text>
+                      </Section>
+                    ) : null}
 
-              {info!.sideEffects.length ? (
-                <Section
-                  icon="check-circle-outline"
-                  title="Common side effects (usually not dangerous)"
-                  isOpen={expanded.sideEffects}
-                  onToggle={() => toggleSection('sideEffects')}
-                >
-                  {info!.sideEffects.map((item, i) => (
-                    <View key={`${item}-${i}`} style={styles.bulletRow}>
-                      <MaterialIcons name="warning-amber" size={16} color={colors.warning} />
-                      <Text style={styles.bulletText}>{item}</Text>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
+                    {info!.sideEffects.length ? (
+                      <Section
+                        icon="check-circle-outline"
+                        title={titles.sideEffects}
+                        isOpen={expanded.sideEffects}
+                        onToggle={() => toggleSection('sideEffects')}
+                      >
+                        {info!.sideEffects.map((item, i) => (
+                          <View key={`${item}-${i}`} style={styles.bulletRow}>
+                            <MaterialIcons name="warning-amber" size={16} color={colors.warning} />
+                            <Text style={styles.bulletText}>{item}</Text>
+                          </View>
+                        ))}
+                      </Section>
+                    ) : null}
 
-              {info!.warning ? (
-                <Section
-                  icon="warning-amber"
-                  title="Call your doctor if you notice…"
-                  iconColor={colors.danger}
-                  isOpen={expanded.warning}
-                  onToggle={() => toggleSection('warning')}
-                >
-                  <View style={styles.bulletRow}>
-                    <MaterialIcons name="warning-amber" size={16} color={colors.danger} />
-                    <Text style={styles.bulletText}>{info!.warning}</Text>
-                  </View>
-                </Section>
-              ) : null}
+                    {info!.warning ? (
+                      <Section
+                        icon="warning-amber"
+                        title={titles.warning}
+                        iconColor={colors.danger}
+                        isOpen={expanded.warning}
+                        onToggle={() => toggleSection('warning')}
+                      >
+                        <View style={styles.bulletRow}>
+                          <MaterialIcons name="warning-amber" size={16} color={colors.danger} />
+                          <Text style={styles.bulletText}>{info!.warning}</Text>
+                        </View>
+                      </Section>
+                    ) : null}
+                  </>
+                );
+              })()}
 
               <View style={styles.disclaimer}>
                 <Text style={styles.disclaimerText}>
