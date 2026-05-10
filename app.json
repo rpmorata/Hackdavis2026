@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ClarityMD",
+    "name": "Clarity AI",
     "slug": "claritymd",
     "version": "0.0.1",
     "orientation": "portrait",
@@ -15,13 +15,13 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "ClarityMD needs access to your microphone to record clinician speech for translation."
+          "microphonePermission": "Clarity AI needs access to your microphone to record clinician speech for translation."
         }
       ]
     ],
     "ios": {
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "ClarityMD needs access to your microphone to record clinician speech for translation."
+        "NSMicrophoneUsageDescription": "Clarity AI needs access to your microphone to record clinician speech for translation."
       }
     },
     "android": {

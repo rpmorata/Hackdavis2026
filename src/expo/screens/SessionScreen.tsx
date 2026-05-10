@@ -320,7 +320,7 @@ function IdleView() {
       </View>
       <Text style={styles.idleTitle}>Ready to listen</Text>
       <Text style={styles.idleSubtitle}>
-        Press the button below and point your device toward the speaker. ClarityMD will translate in real time.
+        Press the button below and point your device toward the speaker. Clarity AI will translate in real time.
       </Text>
       <View style={styles.tipCard}>
         <Text style={styles.tipText}>
@@ -414,7 +414,7 @@ function ResultView({
         <View style={styles.questionsHint}>
           <Text style={styles.questionsHintText}>
             <Text style={styles.questionsHintLabel}>Do you have questions? </Text>
-            Type below in any language — ClarityMD will answer in {language}.
+            Type below in any language — Clarity AI will answer in {language}.
           </Text>
         </View>
       </ScrollView>

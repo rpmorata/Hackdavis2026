@@ -130,7 +130,7 @@ export function HomeScreen({ go }: { go: (route: RouteName) => void }) {
           <View style={styles.tip}>
             <Text style={styles.tipText}>
               <Text style={styles.tipLabel}>Tip: </Text>
-              Use ClarityMD before appointments to prepare questions, during appointments to translate in real time, or after to review what was discussed.
+              Use Clarity AI before appointments to prepare questions, during appointments to translate in real time, or after to review what was discussed.
             </Text>
           </View>
         </View>

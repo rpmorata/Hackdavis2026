@@ -125,7 +125,7 @@ export function ProfileScreen({ go }: { go: (route: RouteName) => void }) {
               <Text style={styles.hipaaTitle}>HIPAA-Ready Design</Text>
             </View>
             <Text style={styles.hipaaBody}>
-              No real Protected Health Information (PHI) is stored in this demo. Your profile is saved locally on your device only. ClarityMD is designed with data privacy at its core.
+              No real Protected Health Information (PHI) is stored in this demo. Your profile is saved locally on your device only. Clarity AI is designed with data privacy at its core.
             </Text>
           </View>
 

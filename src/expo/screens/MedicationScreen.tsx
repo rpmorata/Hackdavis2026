@@ -266,7 +266,7 @@ export function MedicationScreen() {
 
               <View style={styles.disclaimer}>
                 <Text style={styles.disclaimerText}>
-                  This information is provided by ClarityMD AI and is not medical advice. Always follow your doctor's or pharmacist's specific instructions for your situation.
+                  This information is provided by Clarity AI and is not medical advice. Always follow your doctor's or pharmacist's specific instructions for your situation.
                 </Text>
               </View>
             </>

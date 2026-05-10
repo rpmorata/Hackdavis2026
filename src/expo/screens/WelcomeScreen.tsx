@@ -12,10 +12,10 @@ export function WelcomeScreen({ go }: { go: (route: RouteName) => void }) {
   return (
     <Screen>
       <View style={styles.center}>
-        <View style={styles.mark}>
-          <MaterialIcons name="public" size={58} color="#FFFFFF" />
+        <View style={styles.wordmark}>
+          <MaterialIcons name="monitor-heart" size={56} color={colors.primary} />
+          <Text style={styles.logo}>ClarityAI</Text>
         </View>
-        <Title style={styles.logo}>ClarityMD</Title>
         <Body style={styles.copy}>
           Understand your healthcare in your own language
         </Body>
@@ -33,7 +33,7 @@ export function WelcomeScreen({ go }: { go: (route: RouteName) => void }) {
         <Text style={styles.meta}>Free for patients · No clinician enrollment required</Text>
         <View style={styles.disclaimer}>
           <Text style={styles.note}>
-            ClarityMD is an AI-assisted communication tool, not a licensed medical interpreter and does not provide
+            Clarity AI is an AI-assisted communication tool, not a licensed medical interpreter and does not provide
             medical advice. All clinical decisions must be made by a qualified healthcare provider.
           </Text>
         </View>
@@ -50,14 +50,10 @@ const styles = StyleSheet.create({
     padding: 28,
     paddingTop: 68,
   },
-  mark: {
+  wordmark: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 32,
-    height: 104,
-    justifyContent: 'center',
-    marginBottom: 34,
-    width: 104,
+    flexDirection: 'row',
+    gap: 12,
   },
   logo: {
     color: colors.primary,

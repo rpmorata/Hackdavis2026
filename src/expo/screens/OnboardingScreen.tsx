@@ -217,7 +217,7 @@ export function OnboardingScreen({ go }: { go: (route: RouteName) => void }) {
             <View style={styles.disclaimerCard}>
               <MaterialIcons name="info-outline" size={20} color={colors.primary} />
               <Text style={styles.disclaimerText}>
-                <Text style={{ fontFamily: typography.bold }}>Demo Notice:</Text> ClarityMD is a demonstration tool. It is not covered by a BAA and should not be used with real Protected Health Information (PHI).
+                <Text style={{ fontFamily: typography.bold }}>Demo Notice:</Text> Clarity AI is a demonstration tool. It is not covered by a BAA and should not be used with real Protected Health Information (PHI).
               </Text>
             </View>
 
