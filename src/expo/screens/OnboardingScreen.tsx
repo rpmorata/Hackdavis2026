@@ -1,272 +1,614 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ActionButton, Body, Card, Field, Label, Screen, Title } from '../components/ui';
+import {
+  ActionButton,
+  Dropdown,
+  Field,
+  OptionCard,
+  PillGrid,
+  Screen,
+  Title,
+} from '../components/ui';
 import { useProfile } from '../context/ProfileContext';
-import { colors } from '../theme';
+import { colors, typography } from '../theme';
 import { PatientProfile, RouteName } from '../types';
 
-const languages = ['Spanish', 'Chinese (Simplified)', 'Vietnamese', 'Arabic', 'Hindi', 'Tagalog', 'Korean', 'English'];
-const cultures = ['Mexico', 'China', 'Vietnam', 'Middle East', 'India', 'Philippines', 'Korea', 'United States'];
+const LANGUAGES = [
+  'Afrikaans',
+  'Albanian',
+  'Amharic',
+  'Arabic',
+  'Armenian',
+  'Assamese',
+  'Azerbaijani',
+  'Basque',
+  'Belarusian',
+  'Bengali',
+  'Bosnian',
+  'Bulgarian',
+  'Catalan',
+  'Chinese (Simplified)',
+  'Chinese (Traditional)',
+  'Chinese (Hong Kong)',
+  'Croatian',
+  'Czech',
+  'Danish',
+  'Dutch',
+  'English',
+  'Estonian',
+  'Farsi',
+  'Filipino',
+  'Finnish',
+  'French',
+  'Galician',
+  'Georgian',
+  'German',
+  'Greek',
+  'Gujarati',
+  'Hebrew',
+  'Hindi',
+  'Hungarian',
+  'Icelandic',
+  'Indonesian',
+  'Italian',
+  'Japanese',
+  'Kannada',
+  'Kazakh',
+  'Khmer',
+  'Korean',
+  'Lao',
+  'Latvian',
+  'Lithuanian',
+  'Macedonian',
+  'Malay',
+  'Malayalam',
+  'Marathi',
+  'Mongolian',
+  'Nepali',
+  'Norwegian',
+  'Odia',
+  'Polish',
+  'Portuguese',
+  'Punjabi',
+  'Romanian',
+  'Russian',
+  'Serbian',
+  'Slovak',
+  'Slovenian',
+  'Spanish',
+  'Swahili',
+  'Swedish',
+  'Tamil',
+  'Telugu',
+  'Thai',
+  'Turkish',
+  'Ukrainian',
+  'Urdu',
+  'Uzbek',
+  'Vietnamese',
+  'Zulu',
+] as const;
+
+const COUNTRIES = [
+  'Mexico',
+  'China',
+  'Vietnam',
+  'Philippines',
+  'El Salvador',
+  'Guatemala',
+  'India',
+  'Cuba',
+  'Dominican Republic',
+  'Honduras',
+  'South Korea',
+  'Brazil',
+  'Other',
+] as const;
+
+const RELIGIONS = [
+  'Catholic',
+  'Christian',
+  'Islam',
+  'Judaism',
+  'Buddhism',
+  'Hinduism',
+  'Folk / Traditional',
+  'None',
+  'Prefer not to say',
+] as const;
+
+type Language = (typeof LANGUAGES)[number];
+type Country = (typeof COUNTRIES)[number];
+type Religion = (typeof RELIGIONS)[number];
+
+type TimeInUS = '<1' | '1-5' | '5+' | 'born-us';
+type WesternMed = 'comfortable' | 'some' | 'traditional';
+type Trust = 'positive' | 'mixed' | 'distrust' | 'prefer-not';
+
+const TOTAL_STEPS = 3;
 
 export function OnboardingScreen({ go }: { go: (route: RouteName) => void }) {
   const { setProfile } = useProfile();
   const [step, setStep] = useState(0);
-  const [name, setName] = useState('');
-  const [language, setLanguage] = useState('Spanish');
-  const [culture, setCulture] = useState('Mexico');
-  const [healthLiteracy, setHealthLiteracy] = useState<PatientProfile['healthLiteracy']>('some');
-  const [terminology, setTerminology] = useState<PatientProfile['medicalTerminology']>('plain');
-  const [decisionMaker, setDecisionMaker] = useState<PatientProfile['decisionMaker']>('shared');
-  const [tone, setTone] = useState<PatientProfile['communicationTone']>('warm');
-  const [format, setFormat] = useState<PatientProfile['outputFormat']>('both');
 
-  const canContinue = useMemo(() => step > 0 || name.trim().length > 0, [name, step]);
+  // Step 1
+  const [name, setName] = useState('');
+  const [language, setLanguage] = useState<Language | undefined>('Spanish');
+  const [healthLiteracy, setHealthLiteracy] =
+    useState<PatientProfile['healthLiteracy']>('fluent');
+  const [terminology, setTerminology] =
+    useState<PatientProfile['medicalTerminology']>('plain');
+
+  // Step 2
+  const [country, setCountry] = useState<Country | undefined>(undefined);
+  const [timeInUS, setTimeInUS] = useState<TimeInUS | undefined>(undefined);
+  const [westernMed, setWesternMed] = useState<WesternMed | undefined>(undefined);
+  const [religion, setReligion] = useState<Religion | undefined>(undefined);
+
+  // Step 3
+  const [decisionMaker, setDecisionMaker] =
+    useState<PatientProfile['decisionMaker']>('myself');
+  const [trust, setTrust] = useState<Trust | undefined>(undefined);
+
+  const canContinue = useMemo(() => {
+    if (step === 0) return name.trim().length > 0 && !!language;
+    if (step === 1) return !!country;
+    return true;
+  }, [step, name, language, country]);
 
   async function finish() {
     await setProfile({
       name: name.trim() || 'Patient',
-      language,
+      language: language ?? 'English',
       healthLiteracy,
       medicalTerminology: terminology,
-      culturalBackground: culture,
-      timeInUS: 'not-specified',
-      westernMedicineFamiliarity: 'some',
+      culturalBackground: country ?? 'Other',
+      timeInUS: timeInUS ?? 'not-specified',
+      westernMedicineFamiliarity: westernMed ?? 'some',
+      religion,
       decisionMaker,
       familyMode: decisionMaker !== 'myself',
-      medicalTrust: 'mixed',
-      communicationTone: tone,
-      outputFormat: format,
+      medicalTrust: trust ?? 'mixed',
+      communicationTone: 'warm',
+      outputFormat: 'both',
       fontSize: 'normal',
       onboardingComplete: true,
     });
     go('home');
   }
 
+  const headerProps = (() => {
+    if (step === 0) {
+      return {
+        title: 'Language & Literacy',
+        subtitle: 'Help us communicate in the right language, at the right level for you.',
+      };
+    }
+    if (step === 1) {
+      return {
+        title: 'Cultural Background',
+        subtitle: 'Tell us about your background so we can adapt how information is shared.',
+      };
+    }
+    return {
+      title: 'Family & Decisions',
+      subtitle: 'Help us understand how medical decisions work in your family.',
+    };
+  })();
+
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.progress}>Step {step + 1} of 3</Text>
-          <Title>{step === 0 ? 'Personalize the translator' : step === 1 ? 'Language and culture' : 'Communication style'}</Title>
-        </View>
+      <OnboardingHeader
+        step={step + 1}
+        total={TOTAL_STEPS}
+        title={headerProps.title}
+        subtitle={headerProps.subtitle}
+        onBack={step > 0 ? () => setStep((value) => value - 1) : undefined}
+      />
 
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {step === 0 ? (
-          <View style={styles.group}>
-            <Label>Name</Label>
-            <Field value={name} onChangeText={setName} placeholder="Patient name" autoCapitalize="words" />
-            <ChoiceGroup
-              label="Reading comfort"
-              value={healthLiteracy}
-              onChange={(value) => setHealthLiteracy(value as PatientProfile['healthLiteracy'])}
-              items={[
-                ['fluent', 'Comfortable reading medical documents'],
-                ['some', 'Prefer simpler written explanations'],
-                ['audio', 'Prefer audio and short summaries'],
-              ]}
-            />
-            <ChoiceGroup
-              label="Medical terminology"
-              value={terminology}
-              onChange={(value) => setTerminology(value as PatientProfile['medicalTerminology'])}
-              items={[
-                ['clinical', 'Use clinical terms'],
-                ['plain', 'Use plain language'],
-                ['simple', 'Use very simple language'],
-              ]}
-            />
-          </View>
+          <>
+            <Section label="What is your name?" required>
+              <Field
+                variant="filled"
+                value={name}
+                onChangeText={setName}
+                placeholder="Your name"
+                autoCapitalize="words"
+              />
+            </Section>
+
+            <Section label="Preferred language for medical information" required>
+              <Dropdown
+                value={language}
+                options={LANGUAGES}
+                placeholder="Select a language"
+                onChange={(v) => setLanguage(v as Language | undefined)}
+              />
+            </Section>
+
+            <Section label="How well can you read in your language?" required>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="I read fluently"
+                  subtitle="I am comfortable reading documents"
+                  selected={healthLiteracy === 'fluent'}
+                  onPress={() => setHealthLiteracy('fluent')}
+                />
+                <OptionCard
+                  title="I read some"
+                  subtitle="I understand simple words and sentences"
+                  selected={healthLiteracy === 'some'}
+                  onPress={() => setHealthLiteracy('some')}
+                />
+                <OptionCard
+                  title="I prefer audio"
+                  subtitle="Please read everything out loud to me"
+                  selected={healthLiteracy === 'audio'}
+                  onPress={() => setHealthLiteracy('audio')}
+                />
+              </View>
+            </Section>
+
+            <Section label="Medical terms — what level do you prefer?" required>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="Use medical words"
+                  subtitle="I understand clinical terminology"
+                  selected={terminology === 'clinical'}
+                  onPress={() => setTerminology('clinical')}
+                />
+                <OptionCard
+                  title="Plain everyday language"
+                  subtitle="Explain things simply, like to a friend"
+                  selected={terminology === 'plain'}
+                  onPress={() => setTerminology('plain')}
+                />
+                <OptionCard
+                  title="Very simple words"
+                  subtitle="Use easy words, short sentences, examples"
+                  selected={terminology === 'simple'}
+                  onPress={() => setTerminology('simple')}
+                />
+              </View>
+            </Section>
+          </>
         ) : null}
 
         {step === 1 ? (
-          <View style={styles.group}>
-            <PickerGrid label="Preferred language" value={language} values={languages} onChange={setLanguage} />
-            <PickerGrid label="Cultural background" value={culture} values={cultures} onChange={setCulture} />
-            <ChoiceGroup
-              label="Medical decisions"
-              value={decisionMaker}
-              onChange={(value) => setDecisionMaker(value as PatientProfile['decisionMaker'])}
-              items={[
-                ['myself', 'I decide for myself'],
-                ['shared', 'I decide with family or caregiver'],
-                ['family', 'Family usually helps decide'],
-              ]}
-            />
-          </View>
+          <>
+            <Section label="Country of origin or cultural background" required>
+              <PillGrid
+                values={COUNTRIES}
+                value={country}
+                onChange={(v) => setCountry(v)}
+                columns={2}
+              />
+            </Section>
+
+            <Section label="How long have you been in the United States?" optional>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="Less than 1 year"
+                  subtitle="Recent arrival"
+                  selected={timeInUS === '<1'}
+                  onPress={() => setTimeInUS('<1')}
+                />
+                <OptionCard
+                  title="1 – 5 years"
+                  selected={timeInUS === '1-5'}
+                  onPress={() => setTimeInUS('1-5')}
+                />
+                <OptionCard
+                  title="5+ years"
+                  selected={timeInUS === '5+'}
+                  onPress={() => setTimeInUS('5+')}
+                />
+                <OptionCard
+                  title="Born in the US"
+                  selected={timeInUS === 'born-us'}
+                  onPress={() => setTimeInUS('born-us')}
+                />
+              </View>
+            </Section>
+
+            <Section label="Experience with Western medicine" optional>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="Comfortable"
+                  subtitle="I have used it for many years"
+                  selected={westernMed === 'comfortable'}
+                  onPress={() => setWesternMed('comfortable')}
+                />
+                <OptionCard
+                  title="Some experience"
+                  subtitle="I know the basics"
+                  selected={westernMed === 'some'}
+                  onPress={() => setWesternMed('some')}
+                />
+                <OptionCard
+                  title="Traditional medicine background"
+                  subtitle="I grew up with herbal or traditional remedies"
+                  selected={westernMed === 'traditional'}
+                  onPress={() => setWesternMed('traditional')}
+                />
+              </View>
+            </Section>
+
+            <Section
+              label="Religious affiliation"
+              optionalHint="optional — helps us adapt sensitive topics"
+            >
+              <PillGrid
+                values={RELIGIONS}
+                value={religion}
+                onChange={(v) => setReligion(v)}
+                columns={2}
+              />
+            </Section>
+          </>
         ) : null}
 
         {step === 2 ? (
-          <View style={styles.group}>
-            <ChoiceGroup
-              label="Tone"
-              value={tone}
-              onChange={(value) => setTone(value as PatientProfile['communicationTone'])}
-              items={[
-                ['direct', 'Direct and concise'],
-                ['warm', 'Warm and reassuring'],
-                ['gentle', 'Gentle for sensitive topics'],
-              ]}
-            />
-            <ChoiceGroup
-              label="Output format"
-              value={format}
-              onChange={(value) => setFormat(value as PatientProfile['outputFormat'])}
-              items={[
-                ['voice', 'Voice only'],
-                ['text', 'Text only'],
-                ['both', 'Voice and text'],
-              ]}
-            />
-            <Card>
-              <Body>
-                These settings tune wording, reading level, and cultural notes. You can update them from Profile.
-              </Body>
-            </Card>
-          </View>
+          <>
+            <Section label="Who makes medical decisions for you?" required>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="I decide for myself"
+                  selected={decisionMaker === 'myself'}
+                  onPress={() => setDecisionMaker('myself')}
+                />
+                <OptionCard
+                  title="I decide with family"
+                  subtitle="I discuss decisions with family members"
+                  selected={decisionMaker === 'shared'}
+                  onPress={() => setDecisionMaker('shared')}
+                />
+                <OptionCard
+                  title="Family decides"
+                  subtitle="A family member is my primary decision-maker"
+                  selected={decisionMaker === 'family'}
+                  onPress={() => setDecisionMaker('family')}
+                />
+              </View>
+            </Section>
+
+            <Section label="Healthcare trust level" optional>
+              <View style={styles.stack}>
+                <OptionCard
+                  title="Positive"
+                  subtitle="I generally trust the healthcare system"
+                  selected={trust === 'positive'}
+                  onPress={() => setTrust('positive')}
+                />
+                <OptionCard
+                  title="Mixed"
+                  subtitle="I have had both good and bad experiences"
+                  selected={trust === 'mixed'}
+                  onPress={() => setTrust('mixed')}
+                />
+                <OptionCard
+                  title="Some distrust"
+                  subtitle="I have concerns or bad past experiences"
+                  selected={trust === 'distrust'}
+                  onPress={() => setTrust('distrust')}
+                />
+                <OptionCard
+                  title="Prefer not to say"
+                  selected={trust === 'prefer-not'}
+                  onPress={() => setTrust('prefer-not')}
+                />
+              </View>
+            </Section>
+          </>
         ) : null}
       </ScrollView>
 
       <View style={styles.actions}>
-        {step > 0 ? <ActionButton variant="secondary" onPress={() => setStep((value) => value - 1)}>Back</ActionButton> : null}
         <ActionButton
-          onPress={() => (step === 2 ? finish() : setStep((value) => value + 1))}
+          onPress={() => (step === TOTAL_STEPS - 1 ? finish() : setStep((value) => value + 1))}
           disabled={!canContinue}
-          style={!canContinue ? styles.disabled : undefined}
+          style={[styles.cta, !canContinue && styles.disabled]}
         >
-          {step === 2 ? 'Finish Setup' : 'Continue'}
+          <View style={styles.ctaContent}>
+            {step === TOTAL_STEPS - 1 ? (
+              <MaterialIcons name="check" size={22} color="#FFFFFF" />
+            ) : null}
+            <Text style={styles.ctaText}>
+              {step === TOTAL_STEPS - 1 ? 'Complete Setup' : 'Continue'}
+            </Text>
+          </View>
         </ActionButton>
       </View>
     </Screen>
   );
 }
 
-function ChoiceGroup({
-  label,
-  value,
-  items,
-  onChange,
+function OnboardingHeader({
+  step,
+  total,
+  title,
+  subtitle,
+  onBack,
 }: {
-  label: string;
-  value: string;
-  items: [string, string][];
-  onChange: (value: string) => void;
+  step: number;
+  total: number;
+  title: string;
+  subtitle: string;
+  onBack?: () => void;
 }) {
+  const progress = step / total;
   return (
-    <View style={styles.group}>
-      <Label>{label}</Label>
-      {items.map(([itemValue, itemLabel]) => (
-        <Pressable
-          key={itemValue}
-          onPress={() => onChange(itemValue)}
-          style={[styles.choice, value === itemValue && styles.choiceActive]}
-        >
-          <Text style={styles.choiceText}>{itemLabel}</Text>
-          {value === itemValue ? <MaterialIcons name="check-circle" size={22} color={colors.accent} /> : null}
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function PickerGrid({
-  label,
-  value,
-  values,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  values: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View style={styles.group}>
-      <Label>{label}</Label>
-      <View style={styles.grid}>
-        {values.map((item) => (
-          <Pressable key={item} onPress={() => onChange(item)} style={[styles.gridItem, value === item && styles.gridActive]}>
-            <Text style={[styles.gridText, value === item && styles.gridTextActive]}>{item}</Text>
-          </Pressable>
-        ))}
+    <View>
+      <View style={styles.headerBand}>
+        <View style={styles.headerRow}>
+          {onBack ? (
+            <Pressable onPress={onBack} hitSlop={8} style={styles.backChip}>
+              <MaterialIcons name="chevron-left" size={22} color={colors.text} />
+            </Pressable>
+          ) : null}
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.headerEyebrow}>
+              Step {step} of {total}
+            </Text>
+            <Title style={styles.headerTitle}>{title}</Title>
+          </View>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+        </View>
+      </View>
+      <View style={styles.subtitleBand}>
+        <Text style={styles.subtitleText}>{subtitle}</Text>
       </View>
     </View>
   );
 }
 
+function Section({
+  label,
+  required,
+  optional,
+  optionalHint,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  optional?: boolean;
+  optionalHint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>
+        {label}
+        {required ? <Text style={styles.requiredMark}> *</Text> : null}
+        {optional ? <Text style={styles.optionalHint}> (optional)</Text> : null}
+        {optionalHint ? <Text style={styles.optionalHint}> ({optionalHint})</Text> : null}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  content: {
-    gap: 22,
-    padding: 18,
-    paddingBottom: 120,
+  headerBand: {
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
   },
-  header: {
-    gap: 8,
-    paddingTop: 8,
-  },
-  progress: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  group: {
+  headerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: 12,
   },
-  choice: {
+  backChip: {
     alignItems: 'center',
     backgroundColor: colors.card,
     borderColor: colors.border,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 54,
-    paddingHorizontal: 14,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
-  choiceActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  choiceText: {
-    color: colors.text,
+  headerTextBlock: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+    gap: 4,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  headerEyebrow: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+    fontSize: 13,
   },
-  gridItem: {
+  headerTitle: {
+    fontSize: 26,
+    lineHeight: 32,
+  },
+  progressTrack: {
     backgroundColor: colors.card,
-    borderColor: colors.border,
     borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    height: 6,
+    marginTop: 16,
+    overflow: 'hidden',
   },
-  gridActive: {
+  progressFill: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderRadius: 999,
+    height: '100%',
   },
-  gridText: {
+  subtitleBand: {
+    backgroundColor: colors.muted,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  subtitleText: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  content: {
+    gap: 24,
+    padding: 18,
+    paddingBottom: 140,
+  },
+  section: {
+    gap: 12,
+  },
+  sectionLabel: {
     color: colors.text,
-    fontWeight: '700',
+    fontFamily: typography.bold,
+    fontSize: 16,
   },
-  gridTextActive: {
-    color: '#FFFFFF',
+  requiredMark: {
+    color: colors.primary,
+    fontFamily: typography.bold,
+  },
+  optionalHint: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+  },
+  stack: {
+    gap: 10,
   },
   actions: {
     backgroundColor: colors.background,
     borderColor: colors.border,
     borderTopWidth: 1,
     bottom: 0,
-    flexDirection: 'row',
-    gap: 10,
     left: 0,
     padding: 18,
+    paddingBottom: 28,
     position: 'absolute',
     right: 0,
+  },
+  cta: {
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    minHeight: 58,
+  },
+  ctaContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'center',
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontFamily: typography.bold,
+    fontSize: 17,
   },
   disabled: {
     opacity: 0.45,

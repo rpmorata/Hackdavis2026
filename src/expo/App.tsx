@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
@@ -30,13 +31,17 @@ export default function App() {
 function AppShell() {
   const { hydrated, profile } = useProfile();
   const [route, setRoute] = useState<RouteName>('welcome');
+  const [fontsLoaded] = useFonts({
+    'Lato-Bold': require('../../assets/fonts/Lato-Bold.ttf'),
+    'Lato-Regular': require('../../assets/fonts/Lato-Regular.ttf'),
+  });
 
   useEffect(() => {
     if (!hydrated) return;
     setRoute(profile?.onboardingComplete ? 'home' : 'welcome');
   }, [hydrated, profile?.onboardingComplete]);
 
-  if (!hydrated) {
+  if (!hydrated || !fontsLoaded) {
     return (
       <SafeAreaView style={styles.loading}>
         <ActivityIndicator color={colors.accent} />

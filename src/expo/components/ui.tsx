@@ -1,9 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
 import {
   GestureResponderEvent,
+  Modal,
   Pressable,
   PressableProps,
+  ScrollView,
   StyleProp,
   StyleSheet,
   Text,
@@ -14,7 +16,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme';
+import { colors, typography } from '../theme';
 
 export function Screen({ children, padded = true }: { children: ReactNode; padded?: boolean }) {
   return <View style={[styles.screen, padded && styles.screenPad]}>{children}</View>;
@@ -112,8 +114,163 @@ export function IconRowButton({
   );
 }
 
-export function Field(props: TextInputProps) {
-  return <TextInput placeholderTextColor={colors.textMuted} {...props} style={[styles.field, props.style]} />;
+export function Field({
+  variant = 'outlined',
+  style,
+  ...props
+}: TextInputProps & { variant?: 'outlined' | 'filled' }) {
+  return (
+    <TextInput
+      placeholderTextColor={colors.textMuted}
+      {...props}
+      style={[styles.field, variant === 'filled' && styles.fieldFilled, style]}
+    />
+  );
+}
+
+export function OptionCard({
+  title,
+  subtitle,
+  selected,
+  onPress,
+}: {
+  title: string;
+  subtitle?: string;
+  selected?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.optionCard,
+        selected && styles.optionCardSelected,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.optionCardText}>
+        <Text style={styles.optionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.optionSubtitle}>{subtitle}</Text> : null}
+      </View>
+      {selected ? (
+        <View style={styles.optionCheck}>
+          <MaterialIcons name="check" size={16} color="#FFFFFF" />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+export function PillGrid<T extends string>({
+  values,
+  value,
+  onChange,
+  columns = 'auto',
+}: {
+  values: readonly T[];
+  value?: T;
+  onChange: (value: T) => void;
+  columns?: 'auto' | 2;
+}) {
+  return (
+    <View style={styles.pillGrid}>
+      {values.map((item) => {
+        const isSelected = value === item;
+        return (
+          <Pressable
+            key={item}
+            onPress={() => onChange(item)}
+            style={({ pressed }) => [
+              styles.pillItem,
+              columns === 2 && styles.pillItemHalf,
+              isSelected && styles.pillItemSelected,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>{item}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function Dropdown<T extends string>({
+  value,
+  options,
+  placeholder = 'Select...',
+  onChange,
+  clearable = true,
+}: {
+  value?: T;
+  options: readonly T[];
+  placeholder?: string;
+  onChange: (value: T | undefined) => void;
+  clearable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.dropdown, pressed && styles.pressed]}
+      >
+        <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}>
+          {value ?? placeholder}
+        </Text>
+        <View style={styles.dropdownActions}>
+          {value && clearable ? (
+            <Pressable
+              onPress={() => onChange(undefined)}
+              hitSlop={8}
+              style={styles.dropdownClear}
+            >
+              <MaterialIcons name="close" size={14} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
+          <MaterialIcons name="keyboard-arrow-down" size={22} color={colors.text} />
+        </View>
+      </Pressable>
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <ScrollView>
+              {options.map((option) => {
+                const isSelected = option === value;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      onChange(option);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => [styles.modalOption, pressed && styles.pressed]}
+                  >
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        isSelected && styles.modalOptionTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                    {isSelected ? (
+                      <MaterialIcons name="check" size={20} color={colors.primary} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
 }
 
 export const styles = StyleSheet.create({
@@ -133,17 +290,18 @@ export const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
+    fontFamily: typography.bold,
     fontSize: 28,
-    fontWeight: '800',
     lineHeight: 34,
   },
   label: {
     color: colors.text,
+    fontFamily: typography.bold,
     fontSize: 16,
-    fontWeight: '700',
   },
   body: {
     color: colors.textMuted,
+    fontFamily: typography.regular,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -177,8 +335,8 @@ export const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
+    fontFamily: typography.bold,
     fontSize: 16,
-    fontWeight: '800',
   },
   buttonTextSecondary: {
     color: colors.text,
@@ -214,8 +372,148 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     color: colors.text,
+    fontFamily: typography.regular,
     fontSize: 16,
     minHeight: 50,
     paddingHorizontal: 14,
+  },
+  fieldFilled: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentSoft,
+    borderWidth: 1.5,
+    color: colors.text,
+    fontFamily: typography.bold,
+    minHeight: 56,
+    paddingHorizontal: 16,
+  },
+  optionCard: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  optionCardSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.primary,
+  },
+  optionCardText: {
+    flex: 1,
+    gap: 4,
+  },
+  optionTitle: {
+    color: colors.text,
+    fontFamily: typography.bold,
+    fontSize: 16,
+  },
+  optionSubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  optionCheck: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  pillGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  pillItem: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  pillItemHalf: {
+    flexBasis: '48%',
+    flexGrow: 1,
+  },
+  pillItemSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.primary,
+  },
+  pillText: {
+    color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 16,
+  },
+  pillTextSelected: {
+    fontFamily: typography.bold,
+  },
+  dropdown: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownText: {
+    color: colors.text,
+    flex: 1,
+    fontFamily: typography.bold,
+    fontSize: 16,
+  },
+  dropdownPlaceholder: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+  },
+  dropdownActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dropdownClear: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(23, 35, 31, 0.4)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: '70%',
+    paddingVertical: 8,
+  },
+  modalOption: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+  },
+  modalOptionText: {
+    color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 17,
+  },
+  modalOptionTextSelected: {
+    color: colors.primary,
+    fontFamily: typography.bold,
   },
 });
