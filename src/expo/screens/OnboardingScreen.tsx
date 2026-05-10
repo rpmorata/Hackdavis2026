@@ -214,6 +214,13 @@ export function OnboardingScreen({ go }: { go: (route: RouteName) => void }) {
       >
         {step === 0 ? (
           <>
+            <View style={styles.disclaimerCard}>
+              <MaterialIcons name="info-outline" size={20} color={colors.primary} />
+              <Text style={styles.disclaimerText}>
+                <Text style={{ fontFamily: typography.bold }}>Demo Notice:</Text> ClarityMD is a demonstration tool. It is not covered by a BAA and should not be used with real Protected Health Information (PHI).
+              </Text>
+            </View>
+
             <Section label="What is your name?" required>
               <Field
                 variant="filled"
@@ -612,5 +619,21 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.45,
+  },
+  disclaimerCard: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+  },
+  disclaimerText: {
+    color: colors.text,
+    flex: 1,
+    fontFamily: typography.regular,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AudioModule,
   createAudioPlayer,
@@ -8,6 +9,7 @@ import {
 } from 'expo-audio';
 import React, { useRef, useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,7 @@ import {
 import { Body, Screen } from '../components/ui';
 import { Waveform } from '../components/Waveform';
 import { useProfile } from '../context/ProfileContext';
+import * as FileSystem from 'expo-file-system';
 import { releaseAudioUri } from '../services/audio';
 import { synthesize, transcribe } from '../services/elevenlabs';
 import { simplifyAndTranslate } from '../services/gemini';
@@ -46,6 +49,7 @@ export function SessionScreen() {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
+  const [showConsent, setShowConsent] = useState(false);
 
   const wantsVoice = profile?.outputFormat !== 'text';
   const isListening = stage === 'recording';
@@ -83,6 +87,11 @@ export function SessionScreen() {
   async function startRecording() {
     setError(null);
     try {
+      const hasConsented = await AsyncStorage.getItem('seenConsent');
+      if (!hasConsented) {
+        setShowConsent(true);
+        return;
+      }
       const { granted } = await AudioModule.requestRecordingPermissionsAsync();
       if (!granted) {
         setError('Microphone permission denied. Enable it in your device settings.');
@@ -105,6 +114,9 @@ export function SessionScreen() {
       setStage('transcribing');
       const transcript = await transcribe({ uri });
       setOriginalText(transcript);
+      try {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      } catch (e) {}
       await runTranslation(transcript);
     } catch (err) {
       showError(err);
@@ -146,7 +158,6 @@ export function SessionScreen() {
         originalText: source,
         translatedText: result.simplified,
         culturalNote: result.culturalNote,
-        audioUri: savedAudioUri,
       });
       setStage('idle');
     } catch (err) {
@@ -268,6 +279,35 @@ export function SessionScreen() {
           </Pressable>
         </View>
       </View>
+
+      <Modal visible={showConsent} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Recording Consent</Text>
+            <Text style={styles.modalBody}>
+              This app records audio to process and translate clinical speech. By continuing, you consent to have your voice recorded.
+            </Text>
+            <View style={{ gap: 12, marginTop: 24 }}>
+              <Pressable
+                style={styles.cta}
+                onPress={async () => {
+                  await AsyncStorage.setItem('seenConsent', 'true');
+                  setShowConsent(false);
+                  startRecording();
+                }}
+              >
+                <Text style={styles.ctaText}>I Consent</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cta, styles.ctaStop]}
+                onPress={() => setShowConsent(false)}
+              >
+                <Text style={styles.ctaText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -665,5 +705,29 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     width: 44,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(23, 35, 31, 0.4)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 48,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontFamily: typography.bold,
+    fontSize: 22,
+    marginBottom: 8,
+  },
+  modalBody: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+    fontSize: 15,
+    lineHeight: 22,
   },
 });
