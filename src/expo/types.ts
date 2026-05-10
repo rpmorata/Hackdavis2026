@@ -29,4 +29,5 @@ export interface SessionEntry {
   originalText: string;
   translatedText: string;
   culturalNote?: string;
+  audioUri?: string;
 }

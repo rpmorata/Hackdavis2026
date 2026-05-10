@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { createAudioPlayer } from 'expo-audio';
+import React, { useRef } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Body, Card, IconRowButton, Label, Pill, Screen, Title } from '../components/ui';
 import { useProfile } from '../context/ProfileContext';
 import { colors } from '../theme';
@@ -20,6 +21,16 @@ const flags: Record<string, string> = {
 export function HomeScreen({ go }: { go: (route: RouteName) => void }) {
   const { profile, sessions } = useProfile();
   const flag = profile?.language ? flags[profile.language] ?? '🌐' : '🌐';
+  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+
+  function playAudio(uri: string) {
+    try {
+      playerRef.current?.release?.();
+    } catch {}
+    const player = createAudioPlayer({ uri });
+    playerRef.current = player;
+    player.play();
+  }
 
   return (
     <Screen padded={false}>
@@ -60,6 +71,16 @@ export function HomeScreen({ go }: { go: (route: RouteName) => void }) {
             <Card key={session.id} style={styles.sessionCard}>
               <View style={styles.sessionHead}>
                 <Label style={{ flex: 1 }}>{session.title}</Label>
+                {session.audioUri ? (
+                  <Pressable
+                    accessibilityLabel="Replay audio"
+                    accessibilityRole="button"
+                    onPress={() => playAudio(session.audioUri!)}
+                    style={styles.replayButton}
+                  >
+                    <MaterialIcons name="volume-up" size={18} color={colors.accent} />
+                  </Pressable>
+                ) : null}
                 <Text style={styles.date}>{session.date}</Text>
               </View>
               <Body numberOfLines={2}>{session.translatedText}</Body>
@@ -136,6 +157,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
+  },
+  replayButton: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
   date: {
     color: colors.textMuted,

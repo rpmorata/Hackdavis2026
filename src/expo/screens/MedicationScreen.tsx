@@ -1,85 +1,204 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { createAudioPlayer } from 'expo-audio';
+import React, { useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActionButton, Body, Card, Field, Label, Screen, Title } from '../components/ui';
+import { useProfile } from '../context/ProfileContext';
+import { releaseAudioUri } from '../services/audio';
+import { askMedication, MedicationInfo } from '../services/backboard';
+import { synthesize } from '../services/elevenlabs';
 import { colors } from '../theme';
 
-const meds: Record<string, { use: string; how: string; sideEffects: string[]; warning: string }> = {
-  lisinopril: {
-    use: 'Helps lower blood pressure and protects the heart and kidneys.',
-    how: 'Take once daily at the same time. Stand up slowly because it can make some people lightheaded.',
-    sideEffects: ['Dry cough', 'Dizziness', 'High potassium on blood tests'],
-    warning: 'Call a clinician urgently for swelling of lips, face, or trouble breathing.',
-  },
-  metformin: {
-    use: 'Helps control blood sugar in type 2 diabetes.',
-    how: 'Take with meals to reduce stomach upset. Extended-release tablets should not be crushed.',
-    sideEffects: ['Nausea', 'Loose stools', 'Metallic taste'],
-    warning: 'Ask a clinician before taking it if you are dehydrated or have kidney problems.',
-  },
-  amoxicillin: {
-    use: 'An antibiotic used for some bacterial infections.',
-    how: 'Take until the prescription is finished unless a clinician tells you to stop.',
-    sideEffects: ['Rash', 'Diarrhea', 'Upset stomach'],
-    warning: 'Seek care for hives, trouble breathing, or severe diarrhea.',
-  },
-};
+const SUGGESTIONS = ['lisinopril', 'metformin', 'amoxicillin', 'atorvastatin', 'metoprolol'];
+
+type Stage = 'idle' | 'loading' | 'speaking';
 
 export function MedicationScreen() {
-  const [query, setQuery] = useState('lisinopril');
-  const key = query.trim().toLowerCase();
-  const med = meds[key];
+  const { profile } = useProfile();
+  const [query, setQuery] = useState('');
+  const [info, setInfo] = useState<MedicationInfo | null>(null);
+  const [stage, setStage] = useState<Stage>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [audioUri, setAudioUri] = useState<string | null>(null);
+  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+
+  function showError(err: unknown) {
+    setError(err instanceof Error ? err.message : String(err));
+    setStage('idle');
+  }
+
+  async function lookup(rawQuery?: string) {
+    const q = (rawQuery ?? query).trim();
+    if (!q) {
+      setError('Enter a medication name first.');
+      return;
+    }
+    setError(null);
+    setStage('loading');
+    setInfo(null);
+    releaseAudioUri(audioUri);
+    setAudioUri(null);
+    try {
+      const result = await askMedication(q, profile);
+      setInfo(result);
+      setStage('idle');
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function speak() {
+    if (!info || info.unknown) return;
+    setError(null);
+    setStage('speaking');
+    try {
+      const sideEffects = info.sideEffects.length
+        ? `Possible side effects: ${info.sideEffects.join(', ')}.`
+        : '';
+      const text = [info.use, info.how, sideEffects, info.warning].filter(Boolean).join(' ');
+      const uri = await synthesize(text);
+      releaseAudioUri(audioUri);
+      setAudioUri(uri);
+      try {
+        playerRef.current?.release?.();
+      } catch {}
+      const player = createAudioPlayer({ uri });
+      playerRef.current = player;
+      player.play();
+      setStage('idle');
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  function pickSuggestion(name: string) {
+    setQuery(name);
+    void lookup(name);
+  }
 
   return (
     <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Title style={{ color: '#FFFFFF' }}>Medication Explainer</Title>
-          <Body style={{ color: '#DCEBE6' }}>Plain-language prescription support with safety reminders.</Body>
+          <Body style={{ color: '#DCEBE6' }}>
+            Plain-language prescription support in {profile?.language ?? 'your language'}, powered by OpenBioLLM.
+          </Body>
         </View>
 
         <View style={styles.search}>
-          <Field value={query} onChangeText={setQuery} placeholder="Search medication" autoCapitalize="none" />
+          <Field
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search medication"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            onSubmitEditing={() => lookup()}
+            editable={stage !== 'loading'}
+          />
+          <ActionButton onPress={() => lookup()} disabled={stage !== 'idle'}>
+            {stage === 'loading' ? 'Looking up...' : 'Look up'}
+          </ActionButton>
           <View style={styles.quick}>
-            {Object.keys(meds).map((name) => (
-              <Pressable key={name} onPress={() => setQuery(name)} style={styles.quickButton}>
+            {SUGGESTIONS.map((name) => (
+              <Pressable
+                key={name}
+                onPress={() => pickSuggestion(name)}
+                style={styles.quickButton}
+                disabled={stage === 'loading'}
+              >
                 <Text style={styles.quickText}>{name}</Text>
               </Pressable>
             ))}
           </View>
         </View>
 
-        {med ? (
-          <Card style={styles.card}>
-            <View style={styles.medHead}>
-              <View>
-                <Text style={styles.medName}>{titleCase(key)}</Text>
-                <Body>Common explanation</Body>
-              </View>
-              <MaterialIcons name="volume-up" size={26} color={colors.accent} />
-            </View>
-            <InfoBlock icon="health-and-safety" title="What it is for" body={med.use} />
-            <InfoBlock icon="schedule" title="How to take it" body={med.how} />
-            <View style={styles.block}>
-              <Label>Possible side effects</Label>
-              {med.sideEffects.map((item) => (
-                <Text key={item} style={styles.bullet}>- {item}</Text>
-              ))}
-            </View>
-            <View style={styles.warning}>
-              <MaterialIcons name="warning-amber" size={20} color={colors.warning} />
-              <Text style={styles.warningText}>{med.warning}</Text>
-            </View>
+        {error ? (
+          <Card style={styles.errorCard}>
+            <MaterialIcons name="error-outline" size={18} color={colors.danger} />
+            <Body style={{ color: colors.danger, flex: 1 }}>{error}</Body>
           </Card>
-        ) : (
+        ) : null}
+
+        {stage === 'loading' ? (
+          <Card style={styles.loadingCard}>
+            <ActivityIndicator color={colors.accent} />
+            <Body>Asking OpenBioLLM about {query}...</Body>
+          </Card>
+        ) : null}
+
+        {info && info.unknown ? (
           <Card style={styles.empty}>
             <MaterialIcons name="search-off" size={34} color={colors.textMuted} />
-            <Label>No local explainer yet</Label>
-            <Body style={{ textAlign: 'center' }}>Try lisinopril, metformin, or amoxicillin for the demo data.</Body>
+            <Label>No reliable information</Label>
+            <Body style={{ textAlign: 'center' }}>
+              The model could not confirm "{query}" as a medication it has reliable information for.
+            </Body>
           </Card>
-        )}
+        ) : null}
 
-        <ActionButton variant="secondary">Ask clinician to review</ActionButton>
+        {info && !info.unknown ? (
+          <Card style={styles.card}>
+            <View style={styles.medHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.medName}>{titleCase(info.name)}</Text>
+                <Body>OpenBioLLM explanation</Body>
+              </View>
+              <Pressable
+                accessibilityLabel="Speak explanation"
+                accessibilityRole="button"
+                onPress={speak}
+                style={styles.speakButton}
+                disabled={stage !== 'idle'}
+              >
+                {stage === 'speaking' ? (
+                  <ActivityIndicator color={colors.accent} />
+                ) : (
+                  <MaterialIcons
+                    name={audioUri ? 'replay' : 'volume-up'}
+                    size={22}
+                    color={colors.accent}
+                  />
+                )}
+              </Pressable>
+            </View>
+            {info.use ? <InfoBlock icon="health-and-safety" title="What it is for" body={info.use} /> : null}
+            {info.how ? <InfoBlock icon="schedule" title="How to take it" body={info.how} /> : null}
+            {info.sideEffects.length ? (
+              <View style={styles.block}>
+                <Label>Possible side effects</Label>
+                {info.sideEffects.map((item, i) => (
+                  <Text key={`${item}-${i}`} style={styles.bullet}>
+                    - {item}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {info.warning ? (
+              <View style={styles.warning}>
+                <MaterialIcons name="warning-amber" size={20} color={colors.warning} />
+                <Text style={styles.warningText}>{info.warning}</Text>
+              </View>
+            ) : null}
+            <View style={styles.disclaimer}>
+              <MaterialIcons name="info-outline" size={16} color={colors.textMuted} />
+              <Body style={{ color: colors.textMuted, flex: 1, fontSize: 12 }}>
+                AI output should be reviewed by a clinician before medical decisions.
+              </Body>
+            </View>
+          </Card>
+        ) : null}
+
+        {!info && !error && stage === 'idle' ? (
+          <Card style={styles.empty}>
+            <MaterialIcons name="medication" size={34} color={colors.textMuted} />
+            <Label>Look up any medication</Label>
+            <Body style={{ textAlign: 'center' }}>
+              Type a name above or tap a suggestion to get plain-language info from OpenBioLLM.
+            </Body>
+          </Card>
+        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -98,6 +217,7 @@ function InfoBlock({ icon, title, body }: { icon: keyof typeof MaterialIcons.gly
 }
 
 function titleCase(value: string) {
+  if (!value) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -131,6 +251,20 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '800',
   },
+  errorCard: {
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderColor: colors.danger,
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 18,
+  },
+  loadingCard: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 18,
+  },
   card: {
     gap: 16,
     marginHorizontal: 18,
@@ -138,12 +272,21 @@ const styles = StyleSheet.create({
   medHead: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
   },
   medName: {
     color: colors.text,
     fontSize: 26,
     fontWeight: '900',
+  },
+  speakButton: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
   infoBlock: {
     alignItems: 'flex-start',
@@ -172,6 +315,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 20,
+  },
+  disclaimer: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
   },
   empty: {
     alignItems: 'center',

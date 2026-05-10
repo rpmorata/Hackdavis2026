@@ -10,6 +10,24 @@
     "web": {
       "bundler": "metro",
       "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "ClarityMD needs access to your microphone to record clinician speech for translation."
+        }
+      ]
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "ClarityMD needs access to your microphone to record clinician speech for translation."
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     }
   }
 }
