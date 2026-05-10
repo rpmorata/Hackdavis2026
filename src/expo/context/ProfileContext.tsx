@@ -62,8 +62,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       async clearProfile() {
         setProfileState(null);
         setSessions([]);
-        await AsyncStorage.removeItem(PROFILE_KEY);
-        await AsyncStorage.removeItem(SESSIONS_KEY);
+        await Promise.all([
+          AsyncStorage.removeItem(PROFILE_KEY),
+          AsyncStorage.removeItem(SESSIONS_KEY),
+        ]);
       },
     }),
     [hydrated, profileState, sessions],
