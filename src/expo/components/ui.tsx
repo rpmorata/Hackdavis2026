@@ -94,22 +94,46 @@ export function IconRowButton({
   title,
   subtitle,
   onPress,
+  variant = 'outlined',
 }: {
   icon: keyof typeof MaterialIcons.glyphMap;
   title: string;
   subtitle?: string;
   onPress?: (event: GestureResponderEvent) => void;
+  variant?: 'outlined' | 'primary' | 'tinted';
 }) {
+  const isPrimary = variant === 'primary';
+  const isTinted = variant === 'tinted';
+  const titleColor = isPrimary ? '#FFFFFF' : colors.text;
+  const subtitleColor = isPrimary ? 'rgba(255,255,255,0.78)' : colors.textMuted;
+  const iconColor = isPrimary ? '#FFFFFF' : isTinted ? '#FFFFFF' : colors.accent;
+  const chevronColor = isPrimary ? '#FFFFFF' : colors.textMuted;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.rowButton, pressed && styles.pressed]}>
-      <View style={styles.rowIcon}>
-        <MaterialIcons name={icon} size={24} color={colors.accent} />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.rowButton,
+        isPrimary && styles.rowButtonPrimary,
+        isTinted && styles.rowButtonTinted,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={[
+          styles.rowIcon,
+          isPrimary && styles.rowIconPrimary,
+          isTinted && styles.rowIconTinted,
+        ]}
+      >
+        <MaterialIcons name={icon} size={24} color={iconColor} />
       </View>
       <View style={styles.rowText}>
-        <Label>{title}</Label>
-        {subtitle ? <Body style={{ marginTop: 2 }}>{subtitle}</Body> : null}
+        <Text style={[styles.rowTitle, { color: titleColor }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[styles.rowSubtitle, { color: subtitleColor }]}>{subtitle}</Text>
+        ) : null}
       </View>
-      <MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />
+      <MaterialIcons name="chevron-right" size={24} color={chevronColor} />
     </Pressable>
   );
 }
@@ -355,6 +379,14 @@ export const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
   },
+  rowButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  rowButtonTinted: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentSoft,
+  },
   rowIcon: {
     alignItems: 'center',
     backgroundColor: colors.accentSoft,
@@ -363,8 +395,24 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
   },
+  rowIconPrimary: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  rowIconTinted: {
+    backgroundColor: colors.primary,
+  },
   rowText: {
     flex: 1,
+    gap: 2,
+  },
+  rowTitle: {
+    fontFamily: typography.bold,
+    fontSize: 17,
+  },
+  rowSubtitle: {
+    fontFamily: typography.regular,
+    fontSize: 13,
+    lineHeight: 18,
   },
   field: {
     backgroundColor: colors.card,

@@ -15,42 +15,12 @@ interface ProfileContextType {
 const PROFILE_KEY = 'claritymd_profile';
 const SESSIONS_KEY = 'claritymd_sessions';
 
-const mockSessions: SessionEntry[] = [
-  {
-    id: '1',
-    date: 'May 9, 2026',
-    title: 'Cardiology Appointment',
-    originalText:
-      "Your blood pressure is 140 over 90. This is stage 2 hypertension. I'm going to prescribe Lisinopril, 10 milligrams once a day.",
-    translatedText:
-      'Su presion arterial es 140 sobre 90. Esto es hipertension de etapa 2. Le voy a recetar Lisinopril, 10 miligramos una vez al dia.',
-    culturalNote:
-      'Su esposo tambien podria querer escuchar esta informacion. Con apoyo familiar y atencion medica, muchas personas manejan esta condicion muy bien.',
-  },
-  {
-    id: '2',
-    date: 'May 6, 2026',
-    title: 'Prescription Consultation',
-    originalText: 'Metformin helps control your blood sugar levels. Take it with meals to reduce stomach upset.',
-    translatedText:
-      'La Metformina ayuda a controlar sus niveles de azucar en la sangre. Tomela con las comidas para reducir el malestar estomacal.',
-  },
-  {
-    id: '3',
-    date: 'May 2, 2026',
-    title: 'Diabetes Follow-Up',
-    originalText: 'Your A1C levels have improved significantly. Keep monitoring your blood sugar daily.',
-    translatedText:
-      'Sus niveles de A1C han mejorado significativamente. Continue monitoreando su azucar en la sangre a diario.',
-  },
-];
-
 const ProfileContext = createContext<ProfileContextType | null>(null);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [profileState, setProfileState] = useState<PatientProfile | null>(null);
-  const [sessions, setSessions] = useState<SessionEntry[]>(mockSessions);
+  const [sessions, setSessions] = useState<SessionEntry[]>([]);
 
   useEffect(() => {
     let active = true;

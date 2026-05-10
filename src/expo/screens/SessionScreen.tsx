@@ -1,40 +1,59 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { AudioModule, createAudioPlayer, RecordingPresets, useAudioRecorder } from 'expo-audio';
+import {
+  AudioModule,
+  createAudioPlayer,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from 'expo-audio';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ActionButton, Body, Card, Label, Screen, Title } from '../components/ui';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Body, Screen } from '../components/ui';
 import { Waveform } from '../components/Waveform';
 import { useProfile } from '../context/ProfileContext';
 import { releaseAudioUri } from '../services/audio';
-import { transcribe, synthesize } from '../services/elevenlabs';
+import { synthesize, transcribe } from '../services/elevenlabs';
 import { simplifyAndTranslate } from '../services/gemini';
-import { colors } from '../theme';
+import { colors, typography } from '../theme';
 
 type Stage = 'idle' | 'recording' | 'transcribing' | 'translating' | 'speaking';
 
-const STAGE_LABEL: Record<Stage, string> = {
-  idle: '',
-  recording: 'Recording...',
-  transcribing: 'Transcribing speech...',
-  translating: 'Simplifying and translating...',
-  speaking: 'Generating voice...',
+const STAGE_COPY: Record<Stage, { label: string; status: string }> = {
+  idle: { label: '', status: 'Ready to start' },
+  recording: { label: 'Listening for clinical speech…', status: 'Listening...' },
+  transcribing: { label: 'Transcribing speech…', status: 'Processing...' },
+  translating: { label: 'Adapting for you…', status: 'Processing...' },
+  speaking: { label: 'Generating voice…', status: 'Processing...' },
 };
 
 export function SessionScreen() {
   const { profile, addSession } = useProfile();
+  const language = profile?.language ?? 'English';
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
 
   const [stage, setStage] = useState<Stage>('idle');
-  const [input, setInput] = useState('');
-  const [translated, setTranslated] = useState('');
+  const [originalText, setOriginalText] = useState<string>('');
+  const [translated, setTranslated] = useState<string>('');
   const [culturalNote, setCulturalNote] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [question, setQuestion] = useState('');
 
-  const isRecording = stage === 'recording';
-  const isProcessing = stage === 'transcribing' || stage === 'translating' || stage === 'speaking';
   const wantsVoice = profile?.outputFormat !== 'text';
+  const isListening = stage === 'recording';
+  const isProcessing =
+    stage === 'transcribing' || stage === 'translating' || stage === 'speaking';
+  const hasResult = !!translated;
+  const showIdle = !isListening && !isProcessing && !hasResult;
+  const statusLabel = hasResult && stage === 'idle' ? 'Ready for more' : STAGE_COPY[stage].status;
 
   function showError(err: unknown) {
     setError(err instanceof Error ? err.message : String(err));
@@ -50,6 +69,17 @@ export function SessionScreen() {
     player.play();
   }
 
+  function reset() {
+    setStage('idle');
+    setOriginalText('');
+    setTranslated('');
+    setCulturalNote(null);
+    setError(null);
+    setQuestion('');
+    releaseAudioUri(audioUri);
+    setAudioUri(null);
+  }
+
   async function startRecording() {
     setError(null);
     try {
@@ -58,6 +88,7 @@ export function SessionScreen() {
         setError('Microphone permission denied. Enable it in your device settings.');
         return;
       }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
       setStage('recording');
@@ -73,14 +104,18 @@ export function SessionScreen() {
       if (!uri) throw new Error('Recording produced no audio.');
       setStage('transcribing');
       const transcript = await transcribe({ uri });
-      setInput(transcript);
-      await runFromText(transcript);
+      setOriginalText(transcript);
+      await runTranslation(transcript);
     } catch (err) {
       showError(err);
+    } finally {
+      try {
+        await setAudioModeAsync({ allowsRecording: false });
+      } catch {}
     }
   }
 
-  async function runFromText(source: string) {
+  async function runTranslation(source: string) {
     try {
       setError(null);
       setStage('translating');
@@ -102,7 +137,11 @@ export function SessionScreen() {
 
       await addSession({
         id: Date.now().toString(),
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        date: new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }),
         title: 'Live Translation Session',
         originalText: source,
         translatedText: result.simplified,
@@ -115,193 +154,516 @@ export function SessionScreen() {
     }
   }
 
-  async function onTranslatePress() {
-    const source = input.trim();
-    if (!source) {
-      setError('Type or record some text before translating.');
-      return;
-    }
-    await runFromText(source);
-  }
-
-  function onMicPress() {
-    if (isRecording) {
-      void stopAndProcess();
-    } else if (!isProcessing) {
-      void startRecording();
+  function onPrimaryPress() {
+    if (showIdle) return startRecording();
+    if (isListening) return stopAndProcess();
+    if (hasResult) {
+      if (audioUri) {
+        play(audioUri);
+      } else {
+        reset();
+      }
     }
   }
-
-  const micIcon = isRecording ? 'stop' : isProcessing ? 'hourglass-empty' : 'mic';
-  const micLabel = isRecording
-    ? 'Stop & Translate'
-    : isProcessing
-      ? STAGE_LABEL[stage]
-      : 'Start Recording';
 
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <View style={styles.root}>
+        {/* Header */}
         <View style={styles.header}>
-          <Title style={{ color: '#FFFFFF' }}>Live Session</Title>
-          <Body style={{ color: '#DCEBE6' }}>
-            Translate clinical language into {profile?.language ?? 'the patient language'}.
-          </Body>
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.headerTitle}>Live Session</Text>
+            <Text style={styles.headerSubtitle}>
+              {language}
+              {profile?.name ? ` · ${profile.name}` : ''}
+            </Text>
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  isProcessing && styles.statusDotProcessing,
+                ]}
+              />
+              <Text style={styles.statusText}>{statusLabel}</Text>
+            </View>
+          </View>
+          {!showIdle ? (
+            <Pressable onPress={reset} hitSlop={8} style={styles.resetChip}>
+              <MaterialIcons name="refresh" size={18} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
         </View>
 
-        <Card style={styles.recorder}>
-          <Waveform active={isRecording} />
-          {isProcessing ? (
-            <View style={styles.stageRow}>
-              <ActivityIndicator color={colors.accent} />
-              <Body style={{ color: colors.text }}>{STAGE_LABEL[stage]}</Body>
+        {/* Body */}
+        <View style={styles.body}>
+          {showIdle ? (
+            <IdleView />
+          ) : isListening || isProcessing ? (
+            <ListeningView
+              stage={stage}
+              originalText={originalText}
+              isProcessing={isProcessing}
+            />
+          ) : (
+            <ResultView
+              language={language}
+              originalText={originalText}
+              translated={translated}
+              culturalNote={culturalNote}
+              hasAudio={!!audioUri}
+              onReplay={() => audioUri && play(audioUri)}
+              question={question}
+              setQuestion={setQuestion}
+            />
+          )}
+
+          {error ? (
+            <View style={styles.errorBanner}>
+              <MaterialIcons name="error-outline" size={16} color={colors.danger} />
+              <Body style={{ color: colors.danger, flex: 1 }}>{error}</Body>
             </View>
           ) : null}
-          <ActionButton onPress={onMicPress} disabled={isProcessing}>
-            <View style={styles.buttonInner}>
-              <MaterialIcons name={micIcon} size={22} color="#FFFFFF" />
-              <Text style={styles.buttonText}>{micLabel}</Text>
-            </View>
-          </ActionButton>
-        </Card>
-
-        {error ? (
-          <Card style={styles.errorCard}>
-            <MaterialIcons name="error-outline" size={18} color={colors.danger} />
-            <Body style={{ color: colors.danger, flex: 1 }}>{error}</Body>
-          </Card>
-        ) : null}
-
-        <View style={styles.group}>
-          <Label>Clinician text</Label>
-          <TextInput
-            multiline
-            onChangeText={setInput}
-            placeholder="Type or paste what the clinician said, or use the mic above."
-            placeholderTextColor={colors.textMuted}
-            style={styles.textArea}
-            value={input}
-            editable={!isProcessing}
-          />
-          <ActionButton onPress={onTranslatePress} disabled={isProcessing || isRecording}>
-            Translate
-          </ActionButton>
         </View>
 
-        {translated ? (
-          <Card style={styles.output}>
-            <View style={styles.outputHead}>
-              <Label style={{ flex: 1 }}>Patient-friendly explanation</Label>
-              {audioUri ? (
+        {/* Footer CTA */}
+        <View style={styles.footer}>
+          <Pressable
+            onPress={onPrimaryPress}
+            disabled={isProcessing}
+            style={({ pressed }) => [
+              styles.cta,
+              isListening && styles.ctaStop,
+              isProcessing && styles.ctaDisabled,
+              pressed && !isProcessing && styles.pressed,
+            ]}
+          >
+            {isProcessing ? (
+              <Text style={styles.ctaText}>{STAGE_COPY[stage].label}</Text>
+            ) : (
+              <View style={styles.ctaInner}>
                 <MaterialIcons
-                  name="volume-up"
+                  name={
+                    isListening
+                      ? 'stop'
+                      : hasResult && audioUri
+                        ? 'mic'
+                        : hasResult
+                          ? 'refresh'
+                          : 'mic'
+                  }
                   size={22}
-                  color={colors.accent}
-                  onPress={() => audioUri && play(audioUri)}
+                  color="#FFFFFF"
                 />
-              ) : null}
-            </View>
-            <Text style={styles.translated}>{translated}</Text>
-            {culturalNote ? (
-              <View style={styles.note}>
-                <MaterialIcons name="diversity-3" size={18} color={colors.primary} />
-                <Body style={{ color: colors.primary, flex: 1 }}>{culturalNote}</Body>
+                <Text style={styles.ctaText}>
+                  {isListening
+                    ? 'Stop'
+                    : hasResult
+                      ? audioUri
+                        ? 'Listen Again'
+                        : 'New Session'
+                      : 'Start Listening'}
+                </Text>
               </View>
-            ) : null}
-            <View style={styles.disclaimer}>
-              <MaterialIcons name="warning-amber" size={18} color={colors.warning} />
-              <Body style={{ flex: 1 }}>AI output should be reviewed by a clinician before medical decisions.</Body>
-            </View>
-          </Card>
-        ) : null}
-      </ScrollView>
+            )}
+          </Pressable>
+        </View>
+      </View>
     </Screen>
   );
 }
 
+function IdleView() {
+  return (
+    <ScrollView contentContainerStyle={styles.idleContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.micCircle}>
+        <MaterialIcons name="mic" size={56} color={colors.primary} />
+      </View>
+      <Text style={styles.idleTitle}>Ready to listen</Text>
+      <Text style={styles.idleSubtitle}>
+        Press the button below and point your device toward the speaker. ClarityMD will translate in real time.
+      </Text>
+      <View style={styles.tipCard}>
+        <Text style={styles.tipText}>
+          <Text style={styles.tipLabel}>Demo mode: </Text>
+          Tap "Start Listening" to capture clinical speech. The AI translation and cultural adaptation appear after you stop.
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+function ListeningView({
+  stage,
+  originalText,
+  isProcessing,
+}: {
+  stage: Stage;
+  originalText: string;
+  isProcessing: boolean;
+}) {
+  return (
+    <ScrollView contentContainerStyle={styles.listeningContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.captureCard}>
+        <View style={styles.captureLabelRow}>
+          <View style={[styles.statusDot, isProcessing && styles.statusDotProcessing]} />
+          <Text style={styles.captureLabel}>
+            {isProcessing ? STAGE_COPY[stage].status.toUpperCase() : "CAPTURING — DOCTOR'S SPEECH"}
+          </Text>
+        </View>
+        <View style={styles.captureWaveform}>
+          <Waveform active={!isProcessing} />
+        </View>
+        <Text style={styles.captureText}>
+          {originalText || STAGE_COPY[stage].label}
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+function ResultView({
+  language,
+  originalText,
+  translated,
+  culturalNote,
+  hasAudio,
+  onReplay,
+  question,
+  setQuestion,
+}: {
+  language: string;
+  originalText: string;
+  translated: string;
+  culturalNote: string | null;
+  hasAudio: boolean;
+  onReplay: () => void;
+  question: string;
+  setQuestion: (value: string) => void;
+}) {
+  return (
+    <View style={styles.resultRoot}>
+      <ScrollView
+        contentContainerStyle={styles.resultContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.resultCard}>
+          <Text style={styles.resultLabel}>DOCTOR (ORIGINAL)</Text>
+          <Text style={styles.resultBody}>"{originalText}"</Text>
+        </View>
+
+        <View style={styles.resultCard}>
+          <View style={styles.resultLabelRow}>
+            {hasAudio ? (
+              <Pressable onPress={onReplay} hitSlop={8}>
+                <MaterialIcons name="volume-up" size={16} color={colors.primary} />
+              </Pressable>
+            ) : null}
+            <Text style={styles.resultLabel}>{language.toUpperCase()} · ADAPTED FOR YOU</Text>
+          </View>
+          <Text style={styles.resultTranslated}>{translated}</Text>
+        </View>
+
+        {culturalNote ? (
+          <View style={styles.resultCard}>
+            <Text style={styles.resultLabel}>CULTURAL CONTEXT</Text>
+            <Text style={styles.resultBody}>{culturalNote}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.questionsHint}>
+          <Text style={styles.questionsHintText}>
+            <Text style={styles.questionsHintLabel}>Do you have questions? </Text>
+            Type below in any language — ClarityMD will answer in {language}.
+          </Text>
+        </View>
+      </ScrollView>
+
+      <View style={styles.questionRow}>
+        <TextInput
+          value={question}
+          onChangeText={setQuestion}
+          placeholder={`Type your question in ${language}…`}
+          placeholderTextColor={colors.textMuted}
+          style={styles.questionInput}
+        />
+        <Pressable hitSlop={6} style={styles.sendButton} onPress={() => {}}>
+          <MaterialIcons name="send" size={18} color={colors.primary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const TAB_BAR_CLEARANCE = 60;
+
 const styles = StyleSheet.create({
-  content: {
-    gap: 18,
-    paddingBottom: 110,
+  root: {
+    flex: 1,
+    paddingBottom: TAB_BAR_CLEARANCE,
   },
   header: {
     backgroundColor: colors.primary,
-    gap: 8,
-    padding: 22,
-  },
-  recorder: {
+    flexDirection: 'row',
     gap: 12,
-    marginHorizontal: 18,
-    marginTop: 18,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 18,
   },
-  stageRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'center',
+  headerTextBlock: {
+    flex: 1,
+    gap: 4,
   },
-  buttonInner: {
+  headerTitle: {
+    color: '#FFFFFF',
+    fontFamily: typography.bold,
+    fontSize: 22,
+  },
+  headerSubtitle: {
+    color: 'rgba(255,255,255,0.78)',
+    fontFamily: typography.regular,
+    fontSize: 14,
+  },
+  statusRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
+    marginTop: 6,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
+  statusDot: {
+    backgroundColor: '#7DDFA8',
+    borderRadius: 999,
+    height: 8,
+    width: 8,
   },
-  errorCard: {
+  statusDotProcessing: {
+    backgroundColor: colors.warning,
+  },
+  statusText: {
+    color: 'rgba(255,255,255,0.78)',
+    fontFamily: typography.regular,
+    fontSize: 13,
+  },
+  resetChip: {
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    borderColor: colors.danger,
-    flexDirection: 'row',
-    gap: 10,
-    marginHorizontal: 18,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
-  group: {
-    gap: 10,
+  body: {
+    flex: 1,
+  },
+  errorBanner: {
+    alignItems: 'flex-start',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 8,
+    margin: 18,
+    padding: 12,
+  },
+  footer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+  cta: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    justifyContent: 'center',
+    minHeight: 58,
     paddingHorizontal: 18,
   },
-  textArea: {
-    backgroundColor: colors.card,
+  ctaStop: {
+    backgroundColor: '#2A3441',
+  },
+  ctaDisabled: {
+    opacity: 0.65,
+  },
+  ctaInner: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontFamily: typography.bold,
+    fontSize: 17,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.99 }],
+  },
+
+  // Idle
+  idleContent: {
+    alignItems: 'center',
+    flexGrow: 1,
+    gap: 18,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 36,
+  },
+  micCircle: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
     borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 140,
+    justifyContent: 'center',
+    width: 140,
+  },
+  idleTitle: {
     color: colors.text,
-    fontSize: 16,
-    minHeight: 130,
-    padding: 14,
-    textAlignVertical: 'top',
+    fontFamily: typography.bold,
+    fontSize: 22,
+    marginTop: 8,
   },
-  output: {
+  idleSubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  tipCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 14,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  tipLabel: {
+    color: colors.text,
+    fontFamily: typography.bold,
+  },
+  tipText: {
+    color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  // Listening
+  listeningContent: {
+    padding: 18,
+  },
+  captureCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 16,
     gap: 12,
-    marginHorizontal: 18,
+    padding: 18,
   },
-  outputHead: {
+  captureLabelRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
   },
-  translated: {
+  captureLabel: {
+    color: colors.primary,
+    fontFamily: typography.bold,
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  captureWaveform: {
+    alignSelf: 'flex-start',
+    transform: [{ scale: 0.7 }],
+    transformOrigin: 'left',
+  },
+  captureText: {
     color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+
+  // Result
+  resultRoot: {
+    flex: 1,
+  },
+  resultContent: {
+    gap: 14,
+    padding: 18,
+    paddingBottom: 8,
+  },
+  resultCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 16,
+    gap: 10,
+    padding: 16,
+  },
+  resultLabelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  resultLabel: {
+    color: colors.primary,
+    fontFamily: typography.bold,
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  resultBody: {
+    color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  resultTranslated: {
+    color: colors.text,
+    fontFamily: typography.regular,
     fontSize: 18,
-    fontWeight: '700',
     lineHeight: 28,
   },
-  note: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.accentSoft,
+  questionsHint: {
+    backgroundColor: colors.muted,
     borderRadius: 12,
-    flexDirection: 'row',
-    gap: 8,
-    padding: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  disclaimer: {
-    alignItems: 'flex-start',
-    backgroundColor: '#FFF7ED',
-    borderRadius: 12,
+  questionsHintLabel: {
+    color: colors.text,
+    fontFamily: typography.bold,
+  },
+  questionsHintText: {
+    color: colors.text,
+    fontFamily: typography.regular,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  questionRow: {
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
-    padding: 10,
+    gap: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 18,
+    paddingTop: 4,
+  },
+  questionInput: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: colors.text,
+    flex: 1,
+    fontFamily: typography.regular,
+    fontSize: 14,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  sendButton: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: 14,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
 });
