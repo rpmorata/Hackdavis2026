@@ -16,6 +16,8 @@ export interface BackboardModel {
 
 export interface MedicationInfo {
   name: string;
+  description?: string;
+  schedule?: string;
   use: string;
   how: string;
   sideEffects: string[];
@@ -136,6 +138,8 @@ export async function askMedication(query: string, profile: PatientProfile | nul
 
   return {
     name: parsed.name ?? query,
+    description: parsed.description,
+    schedule: parsed.schedule,
     use: parsed.use ?? '',
     how: parsed.how ?? '',
     sideEffects: Array.isArray(parsed.sideEffects) ? parsed.sideEffects : [],
