@@ -37,7 +37,7 @@ export function ProfileScreen({ go }: { go: (route: RouteName) => void }) {
         <Setting label="Output" value={profile?.outputFormat ?? 'both'} icon="speaker-notes" />
 
         <ActionButton variant="secondary" onPress={() => go('onboarding')}>Edit Onboarding</ActionButton>
-        <ActionButton variant="danger" onPress={reset}>Clear Profile</ActionButton>
+        <ActionButton variant="danger" onPress={reset}>Delete all my data</ActionButton>
       </ScrollView>
     </Screen>
   );
