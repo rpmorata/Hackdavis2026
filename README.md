@@ -1,11 +1,24 @@
 
-  # IDE Creation
+# ClarityMD
 
-  This is a code bundle for IDE Creation. The original project is available at https://www.figma.com/design/Vpi74yORKuJvIpzxDgUJrc/IDE-Creation.
+ClarityMD is now an Expo app built with React Native primitives. The previous generated Vite/DOM app has been moved to `src/legacy-web` for reference, but the active runtime starts from `index.ts` and `src/expo/App.tsx`.
 
-  ## Running the code
+## Running the code
 
-  Run `npm i` to install the dependencies.
+Run `npm install` to install dependencies.
 
-  Run `npm run dev` to start the development server.
-  
+Run one of:
+
+```bash
+npm run dev
+npm run ios
+npm run android
+npm run web
+```
+
+## Checks
+
+```bash
+npm run typecheck
+npm run build -- --platform web
+```
